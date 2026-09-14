@@ -34,7 +34,7 @@ type model struct {
 	wp      *desktop.Wallpaper
 	focused bool
 	input   textinput.Model
-	cmds    map[string]utils.Entry
+	cmds    map[string]string
 	status  string
 	sel     int
 	wall    string
@@ -66,7 +66,7 @@ func pushRecent(m *model, name string) {
 	_ = saveCfg(m)
 }
 
-func matches(cmds map[string]utils.Entry, q string) []string {
+func matches(cmds map[string]string, q string) []string {
 	q = strings.ToLower(strings.TrimSpace(q))
 	if q == "" {
 		return nil
@@ -85,7 +85,7 @@ func matches(cmds map[string]utils.Entry, q string) []string {
 }
 
 func runCmd(s string) tea.Cmd {
-	c := exec.Command("sh", "-c", s)
+	c := exec.Command("sh", "-c", "("+s+") 2>/dev/null")
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return doneMsg{err}
 	})
@@ -99,71 +99,20 @@ func runCapture(s string) tea.Cmd {
 	}
 }
 
-func parseWrite(q string) (string, string, string, string, bool) {
+func parseWrite(q string) (string, string, bool) {
 	rest := strings.TrimSpace(strings.TrimPrefix(q, ":w"))
 	rest = strings.TrimSpace(rest)
 	i := strings.Index(rest, ":")
 	if i < 0 {
-		return "", "", "", "", false
+		return "", "", false
 	}
 	name := strings.TrimSpace(rest[:i])
-	tail := strings.TrimSpace(rest[i+1:])
-	if name == "" || strings.Contains(name, " ") || tail == "" {
-		return "", "", "", "", false
+	cmd := strings.TrimSpace(rest[i+1:])
+	cmd = strings.Trim(cmd, "\"'")
+	if name == "" || cmd == "" || strings.Contains(name, " ") {
+		return "", "", false
 	}
-	var quoted []string
-	cur := ""
-	in := false
-	for _, r := range tail {
-		if r == '"' || r == '\'' {
-			if in {
-				quoted = append(quoted, cur)
-				cur = ""
-				in = false
-			} else {
-				in = true
-			}
-			continue
-		}
-		if in {
-			cur += string(r)
-		}
-	}
-	if in {
-		return "", "", "", "", false
-	}
-	cmd := ""
-	shortcut := ""
-	color := ""
-	if len(quoted) > 0 {
-		cmd = strings.TrimSpace(quoted[0])
-		for _, t := range quoted[1:] {
-			t = strings.TrimSpace(t)
-			if t == "" {
-				continue
-			}
-			if len([]rune(t)) == 1 && shortcut == "" {
-				shortcut = strings.ToUpper(t)
-			} else if color == "" {
-				color = t
-			}
-		}
-	} else {
-		if strings.Contains(tail, " ") {
-			return "", "", "", "", false
-		}
-		cmd = tail
-	}
-	if cmd == "" {
-		return "", "", "", "", false
-	}
-	if shortcut == "" {
-		shortcut = strings.ToUpper(name[:1])
-	}
-	if color == "" {
-		color = "205"
-	}
-	return name, cmd, shortcut, color, true
+	return name, cmd, true
 }
 
 func parseRemove(q string) (string, bool) {
@@ -302,21 +251,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, runCapture(rest)
 				}
 				if strings.HasPrefix(q, ":w") {
-					name, cmd, shortcut, color, ok := parseWrite(q)
+					name, cmd, ok := parseWrite(q)
 					if !ok {
-						m.status = "use :w name : \"cmd\" [\"shortcut\"] [\"color\"]"
+						m.status = "use :w name : \"cmd\""
 						return m, nil
 					}
 					if m.cmds == nil {
-						m.cmds = map[string]utils.Entry{}
+						m.cmds = map[string]string{}
 					}
-					for k, e := range m.cmds {
-						if k != name && strings.ToUpper(e.Shortcut) == shortcut {
-							m.status = "shortcut " + shortcut + " taken by " + k
-							return m, nil
-						}
-					}
-					m.cmds[name] = utils.Entry{Cmd: cmd, Shortcut: shortcut, Color: color, Fav: m.cmds[name].Fav}
+					m.cmds[name] = cmd
 					if err := saveCfg(&m); err != nil {
 						m.status = "error: " + err.Error()
 						return m, nil
@@ -353,33 +296,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sel = 0
 					return m, nil
 				}
-				if strings.HasPrefix(q, ":fav") {
-					name := strings.TrimSpace(strings.TrimPrefix(q, ":fav"))
-					name = strings.TrimSpace(name)
-					if name == "" || strings.Contains(name, " ") {
-						m.status = "use :fav name"
-						return m, nil
-					}
-					e, ok := m.cmds[name]
-					if !ok {
-						m.status = "no match for " + name
-						return m, nil
-					}
-					e.Fav = !e.Fav
-					m.cmds[name] = e
-					if err := saveCfg(&m); err != nil {
-						m.status = "error: " + err.Error()
-						return m, nil
-					}
-					if e.Fav {
-						m.status = "faved " + name
-					} else {
-						m.status = "unfaved " + name
-					}
-					m.input.SetValue("")
-					m.sel = 0
-					return m, nil
-				}
 				if strings.HasPrefix(q, ":bg") {
 					path, ok := parseBg(q)
 					if !ok {
@@ -402,10 +318,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sel = 0
 					return m, nil
 				}
-				if e, ok := m.cmds[q]; ok {
+				if cmd, ok := m.cmds[q]; ok {
 					m.status = "running " + q
 					pushRecent(&m, q)
-					return m, runCmd(e.Cmd)
+					return m, runCmd(cmd)
 				}
 				ms := matches(m.cmds, q)
 				if len(ms) > 0 {
@@ -414,7 +330,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.status = "running " + ms[m.sel]
 					pushRecent(&m, ms[m.sel])
-					return m, runCmd(m.cmds[ms[m.sel]].Cmd)
+					return m, runCmd(m.cmds[ms[m.sel]])
 				}
 				m.status = "no match for " + q
 				return m, nil
@@ -495,7 +411,7 @@ func (m model) View() string {
 				if i == m.sel {
 					mark = "> "
 				}
-				lines = append(lines, mark+"["+m.cmds[k].Shortcut+"] "+k+" -> "+m.cmds[k].Cmd)
+				lines = append(lines, mark+k+" -> "+m.cmds[k])
 			}
 			if m.status != "" {
 				lines = append(lines, m.status)
