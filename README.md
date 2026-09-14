@@ -51,7 +51,15 @@ edit it by hand if you want, the app picks it up next time you focus the bar. yo
 
 ## installation
 
-you need go. then:
+easiest way (linux and macos):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Dat-one-dev/Aksara/main/install.sh | sh
+```
+
+then run `aksara`. windows folks grab `Aksara_Windows_amd64.tar.gz` from the latest github release.
+
+from source, you need go:
 
 ```sh
 go build -o aksara .

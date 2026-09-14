@@ -1,0 +1,34 @@
+version: 2
+
+project_name: Aksara
+
+builds:
+  - id: aksara
+    main: .
+    binary: aksara
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: aksara
+    name_template: "Aksara_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    files:
+      - README.md
+      - wall.png
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: Dat-one-dev
+    name: Aksara
