@@ -68,6 +68,7 @@ flag if you need it: `-w /path/to/image.png` overrides the wallpaper for that se
 - bubbletea — the whole tui
 - lipgloss — styling and boxes
 - bubbles — the search input
+- prana — my own library lol. i literally made a whole ass library just for this project: https://github.com/Dat-one-dev/Prana. it does the boxes and terminal sizing stuff. felt cool to depend on something i wrote myself instead of only other people's code
 
 wallpaper ascii part uses `nfnt/resize` under the hood.
 
